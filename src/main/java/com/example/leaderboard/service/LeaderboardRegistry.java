@@ -1,0 +1,80 @@
+package com.example.leaderboard.service;
+
+import com.example.leaderboard.cache.BoardKey;
+import com.example.leaderboard.domain.Leaderboard;
+import com.example.leaderboard.domain.LeaderboardId;
+import com.example.leaderboard.error.InvalidRequestException;
+import com.example.leaderboard.error.NotFoundException;
+import com.example.leaderboard.repository.LeaderboardRepository;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+import org.springframework.stereotype.Component;
+
+/**
+ * In-memory lookup of leaderboard definitions.
+ *
+ * <p>Board definitions almost never change but are needed on every request (sort order, reset
+ * period), so they are loaded from Postgres once and then served from memory. That keeps the read
+ * hot path free of database calls.
+ */
+@Component
+public class LeaderboardRegistry {
+
+  private static final Pattern DAILY_KEY = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+  private static final Pattern WEEKLY_KEY = Pattern.compile("\\d{4}-W\\d{2}");
+
+  private final LeaderboardRepository repository;
+  private final PeriodKeyResolver periods;
+  private final Map<LeaderboardId, Leaderboard> cache = new ConcurrentHashMap<>();
+
+  public LeaderboardRegistry(LeaderboardRepository repository, PeriodKeyResolver periods) {
+    this.repository = repository;
+    this.periods = periods;
+  }
+
+  /** Returns the board definition or throws {@link NotFoundException}. */
+  public Leaderboard get(String gameId, String leaderboardId) {
+    LeaderboardId id = new LeaderboardId(gameId, leaderboardId);
+    Leaderboard board = cache.get(id);
+    if (board == null) {
+      board =
+          repository
+              .findById(id)
+              .orElseThrow(
+                  () ->
+                      new NotFoundException("Unknown leaderboard " + gameId + "/" + leaderboardId));
+      cache.put(id, board);
+    }
+    return board;
+  }
+
+  /**
+   * Resolves a board and period. A blank {@code periodKey} means the current period, which is what
+   * clients want almost all the time.
+   */
+  public ResolvedBoard resolve(String gameId, String leaderboardId, String periodKey) {
+    Leaderboard board = get(gameId, leaderboardId);
+    String period =
+        periodKey == null || periodKey.isBlank()
+            ? periods.current(board.getResetPeriod())
+            : checkPeriodFormat(board, periodKey);
+    return new ResolvedBoard(board, new BoardKey(gameId, leaderboardId, period));
+  }
+
+  /** Rejects keys that can't belong to this board, e.g. "2026-W42" on a daily board. */
+  private static String checkPeriodFormat(Leaderboard board, String periodKey) {
+    boolean valid =
+        switch (board.getResetPeriod()) {
+          case NONE -> PeriodKeyResolver.ALL_TIME.equals(periodKey);
+          case DAILY -> DAILY_KEY.matcher(periodKey).matches();
+          case WEEKLY -> WEEKLY_KEY.matcher(periodKey).matches();
+          case SEASON -> true;
+        };
+    if (!valid) {
+      throw new InvalidRequestException(
+          "period_key " + periodKey + " does not match a " + board.getResetPeriod() + " board");
+    }
+    return periodKey;
+  }
+}
