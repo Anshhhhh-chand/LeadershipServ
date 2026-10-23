@@ -17,7 +17,7 @@ java {
 
 // Same gRPC/protobuf versions as the service.
 val grpcVersion = "1.63.0"
-val protobufVersion = "3.25.3"
+val protobufVersion = "3.25.9"
 
 sourceSets {
     named("gatling") {
