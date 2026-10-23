@@ -45,8 +45,8 @@ dependencies {
     implementation("com.google.protobuf:protobuf-java:$protobufVersion")
     implementation("com.google.protobuf:protobuf-java-util:$protobufVersion")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
-    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-micrometer:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-micrometer:2.4.0")
     // Lightweight logging
     implementation("net.logstash.logback:logstash-logback-encoder:7.4")
     compileOnly("javax.annotation:javax.annotation-api:1.3.2") // @Generated on gRPC stubs
